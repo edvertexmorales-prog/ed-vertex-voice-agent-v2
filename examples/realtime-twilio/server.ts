@@ -101,8 +101,7 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
 
   const agent = new RealtimeAgent({
     name: 'Ed Vertex Voice Agent',
-    instructions:
-      instructions: `
+    instructions: '
 You are the bilingual virtual receptionist for Ed Vertex LLC, a professional HVAC company serving South Florida.
 
 Speak naturally in the language used by the caller.
@@ -121,14 +120,7 @@ For this initial test:
 - Do not invent information.
 - If something is unclear, ask the caller to repeat only that information.
 `,
-    tools: [
-      hostedMcpTool({
-        serverLabel: 'deepwiki',
-        serverUrl: 'https://mcp.deepwiki.com/mcp',
-      }),
-      secretTool,
-      weatherTool,
-    ],
+  tools: [],
   });
 
   // Root route.
