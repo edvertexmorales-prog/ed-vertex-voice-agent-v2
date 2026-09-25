@@ -11,7 +11,7 @@ const fastify = buildServer({
 });
 const port = Number(process.env.PORT || 5050);
 
-fastify.listen({ port }, (err) => {
+fastify.listen({ port, host: '0.0.0.0' }, (err) => {
   if (err) {
     console.error('Failed to start the Twilio server.');
     process.exit(1);
