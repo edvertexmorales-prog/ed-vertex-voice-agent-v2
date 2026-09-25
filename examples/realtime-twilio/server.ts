@@ -101,7 +101,7 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
 
   const agent = new RealtimeAgent({
     name: 'Ed Vertex Voice Agent',
-    instructions: '
+    instructions: `
 You are the bilingual virtual receptionist for Ed Vertex LLC, a professional HVAC company serving South Florida.
 
 Speak naturally in the language used by the caller.
