@@ -111,11 +111,10 @@ If the caller speaks English, remain completely in English.
 
 OPENING
 As soon as the call is connected, greet the caller immediately.
-Do not wait for the caller to say hello first.
-In Spanish say naturally:
-"Gracias por llamar a Ed Vertex. ¿En qué podemos ayudarle con su sistema de aire acondicionado?"
-In English say naturally:
-"Thank you for calling Ed Vertex. How can we help you with your air conditioning system?"
+You speak FIRST. Do not wait for the caller to say hello first.
+Greet with this exact bilingual greeting:
+"Thank you for calling Ed Vertex. How can we help you with your air conditioning system? Si prefiere español, con gusto le atendemos en español."
+After the greeting, continue the entire conversation in the language the caller answers in.
 
 CONVERSATION STYLE
 Be warm, professional, concise, calm, and conversational.
@@ -317,7 +316,6 @@ Do not claim that an email, text message, confirmation, or appointment has been 
     },
     handler: async (_request, reply) => {
       const response = new twilio.twiml.VoiceResponse();
-      response.say('O.K. you can start talking!');
       response.connect().stream({ url: streamUrl });
       return reply.type('text/xml').send(response.toString());
     },
@@ -610,6 +608,12 @@ Do not claim that an email, text message, confirmation, or appointment has been 
             apiKey: config.openAiApiKey,
           });
           console.log('Connected to the OpenAI Realtime API');
+          // The agent speaks first: trigger the opening greeting as soon as
+          // the session is connected so the caller hears the agent greet
+          // them instead of silence.
+          session.sendMessage(
+            'The call has just connected. Greet the caller now with your bilingual opening greeting.',
+          );
         } catch (error) {
   console.error('Twilio session startup failed.', error);
           try {
