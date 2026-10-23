@@ -610,8 +610,8 @@ Do not claim that an email, text message, confirmation, or appointment has been 
             apiKey: config.openAiApiKey,
           });
           console.log('Connected to the OpenAI Realtime API');
-        } catch {
-          console.error('Twilio session startup failed.');
+        } catch (error) {
+  console.error('Twilio session startup failed.', error);
           try {
             if (session) session.close();
             else twilioTransportLayer?.close();
