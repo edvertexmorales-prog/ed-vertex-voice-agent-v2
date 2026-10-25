@@ -67,6 +67,57 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
     return sign === 0 ? magnitude : -magnitude;
   }
 
+  // State for the call currently being handled. Ed Vertex receives one
+  // call at a time on this line, so a single holder is enough: the
+  // /incoming-call webhook fills it in when a call starts and the
+  // save_service_request tool reads it when the agent saves the request.
+  const pendingCall = {
+    callerPhone: '',
+    startedAt: '',
+    summarySent: false,
+  };
+
+  // Sends the end-of-call service summary to Eduardo by email (Resend).
+  // Recipient defaults to the Ed Vertex Gmail; override with
+  // SUMMARY_EMAIL_TO. Sender uses the Resend onboarding address until a
+  // domain is verified. If RESEND_API_KEY is missing, it just logs.
+  async function sendSummaryEmail(lines: string[]): Promise<boolean> {
+    const apiKey = process.env.RESEND_API_KEY;
+    const to = process.env.SUMMARY_EMAIL_TO || 'edvertex.morales@gmail.com';
+    if (!apiKey) {
+      console.log('RESEND_API_KEY not set; summary email skipped.');
+      return false;
+    }
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'Agente Ed Vertex <onboarding@resend.dev>',
+          to: [to],
+          subject: lines[0],
+          text: lines.slice(1).join('\n'),
+        }),
+      });
+      if (!response.ok) {
+        console.error(
+          'Summary email failed:',
+          response.status,
+          await response.text(),
+        );
+        return false;
+      }
+      console.log('Summary email sent to', to);
+      return true;
+    } catch (error) {
+      console.error('Summary email error.', error);
+      return false;
+    }
+  }
+
   // Initialize Fastify.
   const fastify = Fastify();
   fastify.register(fastifyFormBody);
@@ -97,6 +148,94 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
       return `The answer to ${question} is 42.`;
     },
     needsApproval: true,
+  });
+
+  // Saves the service request collected during the call and emails the
+  // summary to Eduardo. The agent must call this once, right before
+  // giving the caller the final verbal summary.
+  const saveServiceRequestTool = tool({
+    name: 'save_service_request',
+    description:
+      'Save the service request collected during this call and email the summary to the Ed Vertex office. Call this exactly once, after collecting the customer information and before giving the final summary. For anything the caller did not provide, pass "No proporcionado".',
+    parameters: z.object({
+      fullName: z.string().describe('Full customer name.'),
+      callbackPhone: z
+        .string()
+        .describe('Callback phone number confirmed with the caller.'),
+      serviceAddress: z
+        .string()
+        .describe('Complete service address exactly as confirmed.'),
+      zipCode: z.string().describe('ZIP code of the service address.'),
+      propertyType: z
+        .string()
+        .describe('Residential or commercial property.'),
+      condoOrHoa: z
+        .string()
+        .describe('Whether it is a condominium or HOA property, if known.'),
+      serviceNeeded: z
+        .string()
+        .describe('Brief description of the HVAC service needed.'),
+      equipmentLocation: z
+        .string()
+        .describe('Where the HVAC equipment is located.'),
+      accessInstructions: z
+        .string()
+        .describe('Access instructions: gate, guard, code, parking.'),
+      email: z.string().describe('Customer email address.'),
+      preferredDayTime: z
+        .string()
+        .describe(
+          'Preferred day and time for service (a preference, not a confirmed appointment).',
+        ),
+      callLanguage: z
+        .string()
+        .describe('Language the call was held in: Spanish or English.'),
+    }),
+    execute: async (input: {
+      fullName: string;
+      callbackPhone: string;
+      serviceAddress: string;
+      zipCode: string;
+      propertyType: string;
+      condoOrHoa: string;
+      serviceNeeded: string;
+      equipmentLocation: string;
+      accessInstructions: string;
+      email: string;
+      preferredDayTime: string;
+      callLanguage: string;
+    }) => {
+      if (pendingCall.summarySent) {
+        return 'The service request was already saved for this call. Give the final summary and close the call.';
+      }
+      pendingCall.summarySent = true;
+      const when = new Intl.DateTimeFormat('es-US', {
+        timeZone: 'America/New_York',
+        dateStyle: 'full',
+        timeStyle: 'short',
+      }).format(new Date());
+      await sendSummaryEmail([
+        `Nueva solicitud de servicio — ${input.fullName} — Agente de voz Ed Vertex`,
+        `Fecha y hora de la llamada: ${when} (hora del Este)`,
+        `Teléfono de la llamada (Twilio): ${pendingCall.callerPhone || 'No disponible'}`,
+        '',
+        `Nombre: ${input.fullName}`,
+        `Teléfono de contacto: ${input.callbackPhone}`,
+        `Dirección de servicio: ${input.serviceAddress}`,
+        `ZIP: ${input.zipCode}`,
+        `Tipo de propiedad: ${input.propertyType}`,
+        `Condominio / HOA: ${input.condoOrHoa}`,
+        `Servicio solicitado: ${input.serviceNeeded}`,
+        `Ubicación del equipo: ${input.equipmentLocation}`,
+        `Acceso: ${input.accessInstructions}`,
+        `Correo del cliente: ${input.email}`,
+        `Horario preferido: ${input.preferredDayTime}`,
+        `Idioma de la llamada: ${input.callLanguage}`,
+        '',
+        'Resumen generado por tu agente de voz de Ed Vertex. El horario es una preferencia del cliente: confirma disponibilidad antes de comprometer la visita.',
+      ]);
+      return 'Service request saved. Now give the caller the final summary and close the call politely.';
+    },
   });
 
   const agent = new RealtimeAgent({
@@ -263,13 +402,20 @@ CLOSING
 After giving the final summary, do not ask additional optional questions.
 End the call naturally unless the caller continues the conversation.
 
+SAVING THE REQUEST — REQUIRED
+
+When you have collected the customer's information, and BEFORE you give the final summary, call the save_service_request tool exactly once with everything the caller provided: name, callback phone, complete service address, ZIP code, property type, condominium or HOA if known, service needed, equipment location, access instructions, email, preferred day and time, and the language of the call.
+For anything the caller did not provide, pass "No proporcionado".
+Never mention the tool, the save, or any email to the caller.
+After the tool returns, give the final summary and close the call as usual.
+
 ENDING
 Before ending, give a short summary of the service request using only information the caller actually provided.
 Clearly state that the requested day and time are preferences pending confirmation.
 Do not claim that an email, text message, confirmation, or appointment has been sent or created unless a tool actually performed that action.
 
 `,
-  tools: [],
+  tools: [saveServiceRequestTool],
   });
 
   // Root route.
@@ -314,7 +460,14 @@ Do not claim that an email, text message, confirmation, or appointment has been 
         return reply.code(403).send('Invalid Twilio signature.');
       }
     },
-    handler: async (_request, reply) => {
+    handler: async (request, reply) => {
+      // Remember who is calling so the end-of-call summary email can
+      // include the real caller number reported by Twilio.
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      pendingCall.callerPhone =
+        typeof body.From === 'string' ? body.From : '';
+      pendingCall.startedAt = new Date().toISOString();
+      pendingCall.summarySent = false;
       const response = new twilio.twiml.VoiceResponse();
       response.connect().stream({ url: streamUrl });
       return reply.type('text/xml').send(response.toString());
