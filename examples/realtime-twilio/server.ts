@@ -159,6 +159,11 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
       'Save the service request collected during this call and email the summary to the Ed Vertex office. Call this exactly once, after collecting the customer information and before giving the final summary. For anything the caller did not provide, pass "No proporcionado". When saving, write the service address in standard written form — digits for numbers and complete street names, for example "6155 Northwest 105th Court, Apartment 3110, Doral, FL 33178" — never in spoken number words.',
     parameters: z.object({
       fullName: z.string().describe('Full customer name.'),
+      customerType: z
+        .string()
+        .describe(
+          'Whether the caller said they are already an Ed Vertex customer ("Ya es cliente") or a first-time caller ("Cliente nuevo").',
+        ),
       callbackPhone: z
         .string()
         .describe('Callback phone number confirmed with the caller.'),
@@ -220,6 +225,7 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
         `Teléfono de la llamada (Twilio): ${pendingCall.callerPhone || 'No disponible'}`,
         '',
         `Nombre: ${input.fullName}`,
+        `Tipo de cliente: ${input.customerType}`,
         `Teléfono de contacto: ${input.callbackPhone}`,
         `Dirección de servicio: ${input.serviceAddress}`,
         `ZIP: ${input.zipCode}`,
@@ -287,12 +293,19 @@ Collect naturally, when relevant:
 - Preferred day and time for service
 
 INTAKE ORDER — DO NOT SKIP STEPS
-Ask in this order and do not skip any step: (1) full name, (2) callback phone, (3) complete service address, (4) residential or commercial, (5) condominium or HOA, (6) equipment location, (7) access instructions, (8) email, (9) preferred day and time.
+Ask in this order and do not skip any step: (1) full name, (2) whether they are already an Ed Vertex customer or a first-time caller, (3) callback phone, (4) complete service address, (5) residential or commercial, (6) condominium or HOA, (7) equipment location, (8) access instructions, (9) email, (10) preferred day and time.
 If the caller already provided an item earlier in the call, do not ask for it again — continue with the next missing step.
 
 NAME
 When the caller provides their name, confirm it once.
 After the name has been confirmed, do not ask for it again.
+
+NEW OR RETURNING CUSTOMER
+Right after confirming the name, ask:
+Spanish: "¿Usted ya es cliente de Ed Vertex, o es la primera vez que nos llama?"
+English: "Have you been an Ed Vertex customer before, or is this your first time calling us?"
+If they are a returning customer, welcome them back briefly (for example, "Qué bueno tenerlo de vuelta.") and continue collecting the information the same way — you do not have access to their previous records during the call, so confirm everything they give you now.
+Remember their answer and pass it when saving the request.
 
 PHONE NUMBER
 When confirming a U.S. phone number, read it back grouped as XXX-XXX-XXXX, saying each digit once, in order, and slowly.
@@ -426,7 +439,7 @@ End the call naturally unless the caller continues the conversation.
 
 SAVING THE REQUEST — REQUIRED
 
-When you have collected the customer's information, and BEFORE you give the final summary, call the save_service_request tool exactly once with everything the caller provided: name, callback phone, complete service address, ZIP code, property type, condominium or HOA if known, service needed, equipment location, access instructions, email, preferred day and time, and the language of the call.
+When you have collected the customer's information, and BEFORE you give the final summary, call the save_service_request tool exactly once with everything the caller provided: name, whether they are a returning or first-time customer, callback phone, complete service address, ZIP code, property type, condominium or HOA if known, service needed, equipment location, access instructions, email, preferred day and time, and the language of the call.
 For anything the caller did not provide, pass "No proporcionado".
 When saving, write the service address in standard written form — digits for numbers and complete street names, for example "6155 Northwest 105th Court, Apartment 3110, Doral, FL 33178" — never in spoken number words.
 Never mention the tool, the save, or any email to the caller.
