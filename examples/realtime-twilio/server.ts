@@ -8,6 +8,7 @@ import { TwilioRealtimeTransportLayer } from '@openai/agents-extensions';
 import { hostedMcpTool } from '@openai/agents';
 import { z } from 'zod';
 import process from 'node:process';
+import { readFileSync } from 'node:fs';
 
 export type TwilioServerConfig = {
   openAiApiKey: string;
@@ -76,6 +77,74 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
     startedAt: '',
     summarySent: false,
   };
+
+  // Registered-customer directory for caller recognition (Level 2).
+  // Loaded once at startup from a Render Secret File (never from the
+  // code repository): /etc/secrets/clientes.json maps a caller's phone
+  // in E.164 format (+1XXXXXXXXXX) to their record exported from
+  // Housecall Pro. If the file is missing or invalid, recognition is
+  // simply off and every call runs the normal intake.
+  type KnownClient = {
+    name: string;
+    email: string;
+    address: string;
+    extraAddresses: number;
+    company: string;
+    doNotService: boolean;
+  };
+  let clientDirectory: Record<string, KnownClient> = {};
+  try {
+    const rawDirectory = readFileSync(
+      process.env.CLIENTS_FILE_PATH || '/etc/secrets/clientes.json',
+      'utf8',
+    );
+    const parsedDirectory: unknown = JSON.parse(rawDirectory);
+    if (
+      parsedDirectory &&
+      typeof parsedDirectory === 'object' &&
+      !Array.isArray(parsedDirectory)
+    ) {
+      clientDirectory = parsedDirectory as Record<string, KnownClient>;
+    }
+    console.log(
+      `Client directory loaded: ${Object.keys(clientDirectory).length} numbers.`,
+    );
+  } catch {
+    console.log(
+      'Client directory file not found; caller recognition is off.',
+    );
+  }
+
+  // Extra instructions appended to the agent for a recognized caller.
+  function knownCallerBlock(client: KnownClient): string {
+    const firstName = client.name.split(' ')[0] || client.name;
+    let block = `
+
+REGISTERED CUSTOMER RECOGNIZED BY PHONE NUMBER
+The number this caller is calling from matches a registered Ed Vertex customer. This IS a returning customer.
+Name on file: ${client.name}
+Email on file: ${client.email || '(none on file)'}
+Registered service address: ${client.address || '(none on file)'}`;
+    if (client.extraAddresses > 0) {
+      block += `
+This customer has ${client.extraAddresses} additional address(es) on file. If the service is for a different property than the registered address above, ask for that address with the normal procedure.`;
+    }
+    if (client.doNotService) {
+      block += `
+OFFICE NOTE — never mention this to the caller: this record is flagged "do not service" in the office system. Take the request completely normally; the office reviews every request before scheduling.`;
+    }
+    block += `
+
+How to run this call:
+- Complete the standard two-sentence greeting first. Then, as soon as the caller answers and the language of the call is set, greet them by name. Spanish: "Hola, ${firstName}. Qué bueno tenerlo de vuelta." English: "Hello, ${firstName}, welcome back."
+- Do NOT ask for their name, and do NOT ask whether they are new or returning — you already know. When saving the request, customerType is "Ya es cliente".
+- Callback phone: tell them you can see the number they are calling from, read it back grouped XXX-XXX-XXXX per the PHONE rules, and confirm it is still the best callback number. If they give a different callback number, run the normal phone procedure for the new one.
+- Service address: confirm the registered address instead of asking for one from scratch. Spanish: "¿El servicio es para su dirección registrada en ${client.address}?" English: "Is the service for your registered address at ${client.address}?" If they confirm, that address is the service address — read it back once exactly as the SERVICE ADDRESS rules require (in Spanish calls, the house number and the street number digit by digit in Spanish). If the service is for a different address, switch to the normal address procedure.
+- Email: if an email is on file, confirm it instead of asking them to dictate one: read it back spelled out exactly per the EMAIL rules and ask whether it is still correct. If they give a new email, run the normal email procedure for the new one. If no email is on file, ask for it normally.
+- Everything else follows the normal intake order: service needed, residential or commercial, condominium or HOA, equipment location, access instructions, preferred day and time.
+- If the caller says they are NOT the customer on file (for example, they are calling from someone else's phone), apologize briefly, ignore everything in this section, and run the completely normal intake as a new caller.`;
+    return block;
+  }
 
   // Sends the end-of-call service summary to Eduardo by email (Resend).
   // Recipient defaults to the Ed Vertex Gmail; override with
@@ -551,7 +620,26 @@ Do not claim that an email, text message, confirmation, or appointment has been 
             twilioWebSocket: connection,
           });
 
-          session = new RealtimeSession(agent, {
+          // If the caller's number matches a registered customer,
+          // use a per-call agent whose instructions add the
+          // recognized-customer context; otherwise the base agent.
+          let callAgent = agent;
+          const knownClient = pendingCall.callerPhone
+            ? clientDirectory[pendingCall.callerPhone]
+            : undefined;
+          if (knownClient && typeof agent.instructions === 'string') {
+            callAgent = new RealtimeAgent({
+              name: 'Ed Vertex Voice Agent',
+              instructions:
+                agent.instructions + knownCallerBlock(knownClient),
+              tools: [saveServiceRequestTool],
+            });
+            console.log(
+              `Caller recognized as registered customer: ${knownClient.name} (${pendingCall.callerPhone})`,
+            );
+          }
+
+          session = new RealtimeSession(callAgent, {
             transport: twilioTransportLayer,
             model: 'gpt-realtime-2.1',
             config: {
