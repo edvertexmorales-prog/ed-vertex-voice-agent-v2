@@ -156,8 +156,7 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
   const saveServiceRequestTool = tool({
     name: 'save_service_request',
     description:
-      'Save the service request collected during this call and email the summary to the Ed Vertex office. Call this exactly once, after collecting the customer information and before giving the final summary. For anything the caller did not provide, pass "No proporcionado".
-When saving, write the service address in standard written form — digits for numbers and complete street names, for example "6155 Northwest 105th Court, Apartment 3110, Doral, FL 33178" — never in spoken number words.',
+      'Save the service request collected during this call and email the summary to the Ed Vertex office. Call this exactly once, after collecting the customer information and before giving the final summary. For anything the caller did not provide, pass "No proporcionado". When saving, write the service address in standard written form — digits for numbers and complete street names, for example "6155 Northwest 105th Court, Apartment 3110, Doral, FL 33178" — never in spoken number words.',
     parameters: z.object({
       fullName: z.string().describe('Full customer name.'),
       callbackPhone: z
