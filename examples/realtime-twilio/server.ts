@@ -517,6 +517,11 @@ Do not claim that an email, text message, confirmation, or appointment has been 
             model: 'gpt-realtime-2.1',
             config: {
               audio: {
+                input: {
+                  transcription: {
+                    model: 'gpt-4o-mini-transcribe',
+                  },
+                },
                 output: {
                   voice: 'verse',
                 },
@@ -528,6 +533,29 @@ Do not claim that an email, text message, confirmation, or appointment has been 
           session.on('error', (error: unknown) => {
             console.error('Realtime session error.', error);
           });
+
+          // Log the full conversation transcript (caller + agent) so each
+          // call can be reviewed afterwards in the Render logs.
+          session.on(
+            'transport_event',
+            (event: { type: string; transcript?: string }) => {
+              if (
+                event.type ===
+                  'conversation.item.input_audio_transcription.completed' &&
+                typeof event.transcript === 'string' &&
+                event.transcript.trim()
+              ) {
+                console.log(`TRANSCRIPT CLIENTE: ${event.transcript}`);
+              }
+              if (
+                event.type === 'response.output_audio_transcript.done' &&
+                typeof event.transcript === 'string' &&
+                event.transcript.trim()
+              ) {
+                console.log(`TRANSCRIPT AGENTE: ${event.transcript}`);
+              }
+            },
+          );
 
           if (process.env.DEBUG) {
             connection.addEventListener('close', (event: any) => {
