@@ -76,6 +76,7 @@ export function buildServer(config: TwilioServerConfig): FastifyInstance {
     callerPhone: '',
     startedAt: '',
     summarySent: false,
+    eduardoFlagSent: false,
   };
 
   // Registered-customer directory for caller recognition (Level 2).
@@ -285,10 +286,21 @@ How to run this call:
       callLanguage: string;
       askedForEduardo: string;
     }) => {
-      if (pendingCall.summarySent) {
+      const wantsEduardo = Boolean(
+        input.askedForEduardo &&
+          input.askedForEduardo.trim() &&
+          input.askedForEduardo.trim().toLowerCase() !== 'no',
+      );
+      if (
+        pendingCall.summarySent &&
+        !(wantsEduardo && !pendingCall.eduardoFlagSent)
+      ) {
         return 'The service request was already saved for this call. Give the final summary and close the call.';
       }
       pendingCall.summarySent = true;
+      if (wantsEduardo) {
+        pendingCall.eduardoFlagSent = true;
+      }
       const when = new Intl.DateTimeFormat('es-US', {
         timeZone: 'America/New_York',
         dateStyle: 'full',
@@ -352,6 +364,7 @@ If the caller asks whether you are a person or an AI, answer honestly and briefl
 ASKING FOR EDUARDO
 Eduardo Morales is the owner of Ed Vertex. If the caller asks to speak with Eduardo, with the owner, or with a person instead of you: you CANNOT transfer the call, and you must NEVER give out any personal phone number.
 If the caller is a customer, or is calling about an HVAC service for themselves, say — Spanish: "El señor Eduardo está atendiendo un servicio en este momento. Con gusto tomo su nombre, su teléfono y el motivo de su llamada, y él le devuelve la llamada lo antes posible." English: "Mr. Eduardo is out on a service call right now. I'll gladly take your name, your phone number and the reason for your call, and he will call you back as soon as possible." Then continue the intake normally, and remember that they asked for Eduardo, and why, so you can report it when you save the request.
+If the caller asks for Eduardo AFTER you have already saved the request (for example, after the final summary), call save_service_request ONE more time with the complete information and the Eduardo reason set, so an updated summary reaches Eduardo. Then confirm the message briefly and close. Never tell the caller the message "is already included" unless you have saved it with the Eduardo reason.
 If the caller is a salesperson or vendor — someone selling products, services, advertising, insurance, financing, or anything that is not an HVAC service for themselves — say — Spanish: "El señor Eduardo recibirá su recado y en cuanto tenga oportunidad le devolverá la llamada." English: "Mr. Eduardo will receive your message and will return your call when he has a chance." Take only their name, company, phone number and reason, briefly. Do NOT promise any callback deadline, do NOT run the service intake with a vendor, and after saving the request (use the reason as the service needed and "No proporcionado" for the rest), thank them briefly and end the call without the full service summary.
 Never ask the caller whether they are a customer or a vendor. Treat every caller as a customer and use the customer message above; switch to the vendor message ONLY when the caller clearly states they are selling something.
 
@@ -616,6 +629,7 @@ If the caller asked to speak with Eduardo as a customer, keep the callback promi
         typeof body.From === 'string' ? body.From : '';
       pendingCall.startedAt = new Date().toISOString();
       pendingCall.summarySent = false;
+      pendingCall.eduardoFlagSent = false;
       const response = new twilio.twiml.VoiceResponse();
       response.connect().stream({ url: streamUrl });
       return reply.type('text/xml').send(response.toString());
