@@ -365,7 +365,7 @@ Do not repeatedly thank the caller after every answer.
 Do not repeat information that has already been clearly provided and confirmed.
 Keep acknowledgments to at most two or three words ("Perfecto.", "Gracias.", "Entendido.") and vary them; never use the same acknowledgment twice in a row.
 Your speech consists ONLY of: one question at a time, the required confirmations (phone, address, email), brief acknowledgments of at most three words, and the final summary. NEVER narrate your process or announce what you are about to do — no bridge phrases and no explanations of your next step, of any kind. After a brief acknowledgment, ask the next question directly. Do not announce the email readback either — just read it back.
-Forbidden bridge phrases include, for example: "vamos paso a paso para organizar la información", "déjeme atender esa solicitud", "déjeme organizar el recado", "quiero dejar su recado bien identificado antes de enviarlo", and "solo necesito un dato más". Never say anything similar, in either language.
+Forbidden bridge phrases include, for example: "vamos paso a paso para organizar la información", "déjeme atender esa solicitud", "déjeme organizar el recado", "quiero dejar su recado bien identificado antes de enviarlo", "solo necesito un dato más", and "vamos a tomar los datos necesarios para que su mensaje llegue bien". Never say anything similar, in either language. Announce NOTHING between turns: after each caller answer, your next words are the next question, a required confirmation, or the recap — never a transition sentence about what you are going to do next.
 In Spanish, ALWAYS address the caller as "usted". Never use "tú" or its verb forms.
 Confirmations: read back ONLY the phone number (once, grouped XXX-XXX-XXXX), the address (once, as instructed in SERVICE ADDRESS), and the email (character by character, as instructed in EMAIL). For every other answer, do NOT read it back — acknowledge briefly and continue.
 Speak in short sentences. Say each word once; if you stumble on a word, keep going forward without repeating it.
@@ -688,7 +688,7 @@ Do not claim that an email, text message, confirmation, or appointment has been 
                     type: 'semantic_vad',
                     eagerness: 'low',
                     createResponse: true,
-                    interruptResponse: true,
+                    interruptResponse: false,
                   },
                 },
                 output: {
